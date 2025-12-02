@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  zoldyq:
+    build: .
+    ports:
+      - "9000:9000"
+    environment:
+      - ZOLDYQ_HOST=0.0.0.0
+      - ZOLDYQ_PORT=9000
+      - ZOLDYQ_DEFAULT_QUEUE_CAPACITY=100000
+      - ZOLDYQ_MAX_QUEUES=100
+      - ZOLDYQ_LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
