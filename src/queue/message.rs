@@ -1,4 +1,4 @@
-// TODO: Implement Message struct
+// Message struct
 //
 // Required fields:
 // - payload: serde_json::Value
@@ -12,5 +12,16 @@ pub struct Message {
     pub enqueued_at: u64,
 }
 
-// TODO: Implement Message methods if needed
-
+impl Message {
+    pub fn new(payload: serde_json::Value) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let enqueued_at = now.as_secs() * 1_000_000 + u64::from(now.subsec_micros());
+        
+        Self {
+            payload,
+            enqueued_at,
+        }
+    }
+}
