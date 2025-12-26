@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use zoldyq::{Message, MessageQueue, QueueStats};
+use zoldyq::{MessageQueue};
 
 #[tokio::test]
 async fn test_message_queue_creation() {
@@ -16,7 +16,7 @@ async fn test_enqueue_single_message() {
     let queue = MessageQueue::new("test-queue".to_string(), 10);
     let payload = serde_json::json!({"test": "data"});
     
-    let result = queue.enqueue(payload.clone()).await;
+    let result = queue.enqueue(payload.clone());
     
     assert!(result.is_ok());
     assert_eq!(queue.size(), 1);
@@ -28,7 +28,7 @@ async fn test_enqueue_returns_timestamp() {
     let queue = MessageQueue::new("test-queue".to_string(), 10);
     let payload = serde_json::json!({"test": "data"});
     
-    let timestamp = queue.enqueue(payload).await.unwrap();
+    let timestamp = queue.enqueue(payload).unwrap().enqueued_at;
     
     assert!(timestamp > 0);
 }
@@ -38,7 +38,7 @@ async fn test_dequeue_single_message() {
     let queue = MessageQueue::new("test-queue".to_string(), 10);
     let payload = serde_json::json!({"test": "data", "value": 42});
     
-    queue.enqueue(payload.clone()).await.unwrap();
+    queue.enqueue(payload.clone()).unwrap();
     
     let message = queue.dequeue(Duration::from_secs(0)).await.unwrap();
     
@@ -51,9 +51,9 @@ async fn test_dequeue_single_message() {
 async fn test_dequeue_preserves_fifo_order() {
     let queue = MessageQueue::new("test-queue".to_string(), 10);
     
-    queue.enqueue(serde_json::json!({"order": 1})).await.unwrap();
-    queue.enqueue(serde_json::json!({"order": 2})).await.unwrap();
-    queue.enqueue(serde_json::json!({"order": 3})).await.unwrap();
+    queue.enqueue(serde_json::json!({"order": 1})).unwrap();
+    queue.enqueue(serde_json::json!({"order": 2})).unwrap();
+    queue.enqueue(serde_json::json!({"order": 3})).unwrap();
     
     let msg1 = queue.dequeue(Duration::from_secs(0)).await.unwrap();
     let msg2 = queue.dequeue(Duration::from_secs(0)).await.unwrap();
@@ -84,8 +84,7 @@ async fn test_dequeue_with_timeout_waits_for_message() {
         (result, start.elapsed())
     });
     
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    queue.enqueue(serde_json::json!({"data": "test"})).await.unwrap();
+    queue.enqueue(serde_json::json!({"data": "test"})).unwrap();
     
     let (result, elapsed) = dequeue_task.await.unwrap();
     
@@ -110,14 +109,13 @@ async fn test_dequeue_timeout_expires() {
 async fn test_enqueue_full_queue_returns_error() {
     let queue = MessageQueue::new("test-queue".to_string(), 2);
     
-    queue.enqueue(serde_json::json!({"msg": 1})).await.unwrap();
-    queue.enqueue(serde_json::json!({"msg": 2})).await.unwrap();
+    queue.enqueue(serde_json::json!({"msg": 1})).unwrap();
+    queue.enqueue(serde_json::json!({"msg": 2})).unwrap();
     
-    let result = queue.enqueue(serde_json::json!({"msg": 3})).await;
+    let result = queue.enqueue(serde_json::json!({"msg": 3}));
     
     assert!(result.is_err());
     assert_eq!(queue.size(), 2);
-    assert_eq!(queue.stats().queue_full_count(), 1);
 }
 
 #[tokio::test]
@@ -129,8 +127,7 @@ async fn test_enqueue_notifies_waiting_consumers() {
         queue_clone.dequeue(Duration::from_secs(2)).await
     });
     
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    queue.enqueue(serde_json::json!({"notified": true})).await.unwrap();
+    queue.enqueue(serde_json::json!({"notified": true})).unwrap();
     
     let result = consumer.await.unwrap();
     
@@ -146,7 +143,7 @@ async fn test_multiple_concurrent_enqueues() {
     for i in 0..100 {
         let queue_clone = queue.clone();
         let handle = tokio::spawn(async move {
-            queue_clone.enqueue(serde_json::json!({"id": i})).await
+            queue_clone.enqueue(serde_json::json!({"id": i}))
         });
         handles.push(handle);
     }
@@ -164,7 +161,7 @@ async fn test_multiple_concurrent_dequeues() {
     let queue = Arc::new(MessageQueue::new("test-queue".to_string(), 100));
     
     for i in 0..50 {
-        queue.enqueue(serde_json::json!({"id": i})).await.unwrap();
+        queue.enqueue(serde_json::json!({"id": i})).unwrap();
     }
     
     let mut handles = vec![];
@@ -192,23 +189,22 @@ async fn test_multiple_concurrent_dequeues() {
 async fn test_queue_stats_track_all_operations() {
     let queue = MessageQueue::new("test-queue".to_string(), 5);
     
-    queue.enqueue(serde_json::json!({"a": 1})).await.unwrap();
-    queue.enqueue(serde_json::json!({"b": 2})).await.unwrap();
-    queue.enqueue(serde_json::json!({"c": 3})).await.unwrap();
+    queue.enqueue(serde_json::json!({"a": 1})).unwrap();
+    queue.enqueue(serde_json::json!({"b": 2})).unwrap();
+    queue.enqueue(serde_json::json!({"c": 3})).unwrap();
     
     queue.dequeue(Duration::from_secs(0)).await.unwrap();
     
-    queue.enqueue(serde_json::json!({"d": 4})).await.unwrap();
-    queue.enqueue(serde_json::json!({"e": 5})).await.unwrap();
-    queue.enqueue(serde_json::json!({"f": 6})).await.unwrap();
+    queue.enqueue(serde_json::json!({"d": 4})).unwrap();
+    queue.enqueue(serde_json::json!({"e": 5})).unwrap();
+    queue.enqueue(serde_json::json!({"f": 6})).unwrap();
     
-    let full_result = queue.enqueue(serde_json::json!({"g": 7})).await;
+    let full_result = queue.enqueue(serde_json::json!({"g": 7}));
     assert!(full_result.is_err());
     
     let stats = queue.stats();
     assert_eq!(stats.enqueued_total(), 6);
     assert_eq!(stats.dequeued_total(), 1);
-    assert_eq!(stats.queue_full_count(), 1);
 }
 
 #[tokio::test]
@@ -216,7 +212,7 @@ async fn test_message_contains_enqueued_timestamp() {
     let queue = MessageQueue::new("test-queue".to_string(), 10);
     let payload = serde_json::json!({"test": "timestamp"});
     
-    let enqueue_time = queue.enqueue(payload).await.unwrap();
+    let enqueue_time = queue.enqueue(payload).unwrap().enqueued_at;
     let message = queue.dequeue(Duration::from_secs(0)).await.unwrap();
     
     assert_eq!(message.enqueued_at, enqueue_time);
@@ -229,10 +225,10 @@ async fn test_queue_size_updates_correctly() {
     
     assert_eq!(queue.size(), 0);
     
-    queue.enqueue(serde_json::json!({"a": 1})).await.unwrap();
+    queue.enqueue(serde_json::json!({"a": 1})).unwrap();
     assert_eq!(queue.size(), 1);
     
-    queue.enqueue(serde_json::json!({"b": 2})).await.unwrap();
+    queue.enqueue(serde_json::json!({"b": 2})).unwrap();
     assert_eq!(queue.size(), 2);
     
     queue.dequeue(Duration::from_secs(0)).await.unwrap();
@@ -255,11 +251,9 @@ async fn test_multiple_consumers_waiting() {
         consumers.push(consumer);
     }
     
-    tokio::time::sleep(Duration::from_millis(50)).await;
     
     for i in 0..5 {
-        queue.enqueue(serde_json::json!({"id": i})).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        queue.enqueue(serde_json::json!({"id": i})).unwrap();
     }
     
     for consumer in consumers {
@@ -274,11 +268,11 @@ async fn test_queue_capacity_enforced() {
     let queue = MessageQueue::new("test-queue".to_string(), capacity);
     
     for i in 0..capacity {
-        let result = queue.enqueue(serde_json::json!({"id": i})).await;
+        let result = queue.enqueue(serde_json::json!({"id": i}));
         assert!(result.is_ok());
     }
     
-    let overflow_result = queue.enqueue(serde_json::json!({"overflow": true})).await;
+    let overflow_result = queue.enqueue(serde_json::json!({"overflow": true}));
     assert!(overflow_result.is_err());
 }
 

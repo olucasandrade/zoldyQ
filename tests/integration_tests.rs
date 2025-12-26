@@ -12,9 +12,9 @@ async fn test_end_to_end_single_message() {
         "body": "Thanks for signing up!"
     });
     
-    manager.enqueue("emails", payload.clone()).await.unwrap();
+    manager.enqueue("emails", payload.clone()).unwrap();
     
-    let message = manager.dequeue("emails", Duration::from_secs(0)).await.unwrap();
+    let message = manager.dequeue("emails", Duration::from_secs(0)).await.unwrap().unwrap();
     
     assert_eq!(message.payload, payload);
 }
@@ -28,7 +28,7 @@ async fn test_producer_consumer_pattern() {
         tokio::spawn(async move {
             for i in 0..100 {
                 let payload = serde_json::json!({"id": i});
-                manager.enqueue("tasks", payload).await.unwrap();
+                manager.enqueue("tasks", payload).unwrap();
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })
@@ -39,7 +39,7 @@ async fn test_producer_consumer_pattern() {
         tokio::spawn(async move {
             let mut count = 0;
             for _ in 0..100 {
-                let msg = manager.dequeue("tasks", Duration::from_secs(2)).await;
+                let msg = manager.dequeue("tasks", Duration::from_secs(2)).await.unwrap();
                 if msg.is_some() {
                     count += 1;
                 }
@@ -64,7 +64,7 @@ async fn test_multiple_producers_single_consumer() {
         let producer = tokio::spawn(async move {
             for j in 0..20 {
                 let payload = serde_json::json!({"producer": i, "item": j});
-                manager.enqueue("shared", payload).await.unwrap();
+                manager.enqueue("shared", payload).unwrap();
             }
         });
         producers.push(producer);
@@ -78,7 +78,7 @@ async fn test_multiple_producers_single_consumer() {
     assert_eq!(queue.size(), 100);
     
     for _ in 0..100 {
-        let msg = manager.dequeue("shared", Duration::from_secs(0)).await;
+        let msg = manager.dequeue("shared", Duration::from_secs(0)).await.unwrap();
         assert!(msg.is_some());
     }
     
@@ -91,7 +91,7 @@ async fn test_single_producer_multiple_consumers() {
     
     for i in 0..100 {
         let payload = serde_json::json!({"id": i});
-        manager.enqueue("work", payload).await.unwrap();
+        manager.enqueue("work", payload).unwrap();
     }
     
     let mut consumers = vec![];
@@ -100,7 +100,7 @@ async fn test_single_producer_multiple_consumers() {
         let consumer = tokio::spawn(async move {
             let mut count = 0;
             loop {
-                let msg = manager.dequeue("work", Duration::from_millis(100)).await;
+                let msg = manager.dequeue("work", Duration::from_millis(100)).await.unwrap();
                 match msg {
                     Some(_) => count += 1,
                     None => break,
@@ -127,7 +127,7 @@ async fn test_multiple_queues_isolated_operations() {
         let manager = manager.clone();
         tokio::spawn(async move {
             for i in 0..50 {
-                manager.enqueue("emails", serde_json::json!({"email_id": i})).await.unwrap();
+                manager.enqueue("emails", serde_json::json!({"email_id": i})).unwrap();
             }
         })
     };
@@ -136,7 +136,7 @@ async fn test_multiple_queues_isolated_operations() {
         let manager = manager.clone();
         tokio::spawn(async move {
             for i in 0..30 {
-                manager.enqueue("webhooks", serde_json::json!({"webhook_id": i})).await.unwrap();
+                manager.enqueue("webhooks", serde_json::json!({"webhook_id": i})).unwrap();
             }
         })
     };
@@ -156,16 +156,16 @@ async fn test_backpressure_handling() {
     let manager = Arc::new(QueueManager::new(10, 5));
     
     for i in 0..10 {
-        let result = manager.enqueue("limited", serde_json::json!({"id": i})).await;
+        let result = manager.enqueue("limited", serde_json::json!({"id": i}));
         assert!(result.is_ok());
     }
     
-    let result = manager.enqueue("limited", serde_json::json!({"overflow": true})).await;
+    let result = manager.enqueue("limited", serde_json::json!({"overflow": true}));
     assert!(result.is_err());
     
-    manager.dequeue("limited", Duration::from_secs(0)).await.unwrap();
+    manager.dequeue("limited", Duration::from_secs(0)).await.unwrap().unwrap();
     
-    let result = manager.enqueue("limited", serde_json::json!({"after_dequeue": true})).await;
+    let result = manager.enqueue("limited", serde_json::json!({"after_dequeue": true}));
     assert!(result.is_ok());
 }
 
@@ -177,13 +177,13 @@ async fn test_consumer_blocks_until_message_arrives() {
         let manager = manager.clone();
         tokio::spawn(async move {
             let start = std::time::Instant::now();
-            let msg = manager.dequeue("delayed", Duration::from_secs(2)).await;
+            let msg = manager.dequeue("delayed", Duration::from_secs(2)).await.unwrap();
             (msg, start.elapsed())
         })
     };
     
     tokio::time::sleep(Duration::from_millis(500)).await;
-    manager.enqueue("delayed", serde_json::json!({"arrived": true})).await.unwrap();
+    manager.enqueue("delayed", serde_json::json!({"arrived": true})).unwrap();
     
     let (msg, elapsed) = consumer.await.unwrap();
     
@@ -198,11 +198,11 @@ async fn test_fifo_order_under_load() {
     
     for i in 0..500 {
         let payload = serde_json::json!({"sequence": i});
-        manager.enqueue("ordered", payload).await.unwrap();
+        manager.enqueue("ordered", payload).unwrap();
     }
     
     for i in 0..500 {
-        let msg = manager.dequeue("ordered", Duration::from_secs(0)).await.unwrap();
+        let msg = manager.dequeue("ordered", Duration::from_secs(0)).await.unwrap().unwrap();
         assert_eq!(msg.payload["sequence"], i);
     }
 }
@@ -215,7 +215,7 @@ async fn test_stats_accuracy_under_concurrent_operations() {
     for i in 0..50 {
         let manager = manager.clone();
         let handle = tokio::spawn(async move {
-            manager.enqueue("stats_test", serde_json::json!({"id": i})).await.unwrap();
+            manager.enqueue("stats_test", serde_json::json!({"id": i})).unwrap();
         });
         handles.push(handle);
     }
@@ -231,7 +231,7 @@ async fn test_stats_accuracy_under_concurrent_operations() {
     for _ in 0..25 {
         let manager = manager.clone();
         let handle = tokio::spawn(async move {
-            manager.dequeue("stats_test", Duration::from_secs(0)).await
+            manager.dequeue("stats_test", Duration::from_secs(0)).await.unwrap()
         });
         dequeue_handles.push(handle);
     }
@@ -252,7 +252,7 @@ async fn test_high_throughput_scenario() {
     
     for i in 0..1000 {
         let payload = serde_json::json!({"id": i});
-        manager.enqueue("throughput", payload).await.unwrap();
+        manager.enqueue("throughput", payload).unwrap();
     }
     
     let enqueue_duration = start.elapsed();
@@ -260,7 +260,7 @@ async fn test_high_throughput_scenario() {
     let start = std::time::Instant::now();
     
     for _ in 0..1000 {
-        manager.dequeue("throughput", Duration::from_secs(0)).await.unwrap();
+        manager.dequeue("throughput", Duration::from_secs(0)).await.unwrap().unwrap();
     }
     
     let dequeue_duration = start.elapsed();
@@ -277,11 +277,11 @@ async fn test_queue_full_count_tracking() {
     let manager = Arc::new(QueueManager::new(5, 10));
     
     for i in 0..5 {
-        manager.enqueue("full_test", serde_json::json!({"id": i})).await.unwrap();
+        manager.enqueue("full_test", serde_json::json!({"id": i})).unwrap();
     }
     
     for _ in 0..10 {
-        let _ = manager.enqueue("full_test", serde_json::json!({"overflow": true})).await;
+        let _ = manager.enqueue("full_test", serde_json::json!({"overflow": true}));
     }
     
     let queue = manager.get_queue("full_test").unwrap();
@@ -295,8 +295,8 @@ async fn test_message_timestamps_are_sequential() {
     let mut timestamps = vec![];
     
     for i in 0..10 {
-        let ts = manager.enqueue("timestamps", serde_json::json!({"id": i})).await.unwrap();
-        timestamps.push(ts);
+        let msg = manager.enqueue("timestamps", serde_json::json!({"id": i})).unwrap();
+        timestamps.push(msg.enqueued_at);
         tokio::time::sleep(Duration::from_micros(100)).await;
     }
     
