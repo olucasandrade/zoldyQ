@@ -4,7 +4,8 @@
 // Binary entry point is in src/main.rs
 
 pub mod queue;
+pub mod resp;
 
-// Re-export main types for convenience
 pub use queue::{Message, MessageQueue, QueueManager, QueueStats};
+pub use resp::{RespServer, RespConfig};
 
