@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{sync::Arc, u64};
 use std::time::Duration;
 use redis_protocol::resp2::types::OwnedFrame as RespFrame;
 use crate::QueueManager;
 
-use super::utils::{extract_string, extract_bytes};
+use super::utils::{extract_string, extract_bytes, extract_integer};
 
 pub async fn handle_command(
     frame: RespFrame,
@@ -33,6 +33,7 @@ pub async fn handle_command(
         "PING" => handle_ping(&cmd_array),
         "LPUSH" => handle_lpush(&cmd_array, queue_manager).await,
         "RPOP" => handle_rpop(&cmd_array, queue_manager).await,
+        "BRPOP" => handle_brpop(&cmd_array, queue_manager).await,
         "LLEN" => handle_llen(&cmd_array, queue_manager).await,
         "DEL" => handle_del(&cmd_array, queue_manager).await,
         "COMMAND" => handle_command_docs(),
@@ -108,6 +109,45 @@ async fn handle_rpop(cmd: &[RespFrame], queue_manager: Arc<QueueManager>) -> Res
     }
 }
 
+/// BRPOP queue timeout - Pop from queue (blocking)
+async fn handle_brpop(cmd: &[RespFrame], queue_manager: Arc<QueueManager>) -> RespFrame {
+    if cmd.len() < 3 {
+        return RespFrame::Error("ERR wrong number of arguments for 'brpop' command".to_string());
+    }
+
+    let queue_name = match extract_string(&cmd[1]) {
+        Ok(name) => name,
+        Err(e) => return e,
+    };
+
+    let timeout_secs = match extract_integer(&cmd[2]) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+
+    if timeout_secs < 0 {
+        return RespFrame::Error("ERR timeout must be non-negative".to_string());
+    }
+
+    let timeout = if timeout_secs == 0 {
+        Duration::from_secs(u64::MAX)
+    } else {
+        Duration::from_secs(timeout_secs as u64)
+    };
+
+    match queue_manager.dequeue(&queue_name, timeout).await {
+        Ok(Some(message)) => {
+            let json_str = message.payload.to_string();
+            RespFrame::Array(vec![
+                RespFrame::BulkString(queue_name.into_bytes()),
+                RespFrame::BulkString(json_str.into_bytes()),
+            ])
+        }
+        Ok(None) => RespFrame::Null,
+        Err(e) => RespFrame::Error(format!("ERR {}", e).into()),
+    }
+}
+
 /// LLEN queue - Get queue length
 async fn handle_llen(cmd: &[RespFrame], queue_manager: Arc<QueueManager>) -> RespFrame {
     if cmd.len() != 2 {
@@ -152,6 +192,7 @@ fn handle_command_docs() -> RespFrame {
         RespFrame::BulkString(b"PING".to_vec()),
         RespFrame::BulkString(b"LPUSH".to_vec()),
         RespFrame::BulkString(b"RPOP".to_vec()),
+        RespFrame::BulkString(b"BRPOP".to_vec()),
         RespFrame::BulkString(b"LLEN".to_vec()),
         RespFrame::BulkString(b"DEL".to_vec()),
     ])

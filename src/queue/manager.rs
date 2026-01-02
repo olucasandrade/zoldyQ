@@ -66,8 +66,14 @@ impl QueueManager {
     }
 
     pub async fn dequeue(&self, queue_name: &str, timeout: Duration) -> Result<Option<Message>, Error> {
-        let queue_arc = self.get_queue(queue_name)
-            .ok_or_else(|| Error::new(std::io::ErrorKind::NotFound, "Queue not found"))?;
+        // If timeout is zero, require queue to exist (don't auto-create)
+        // If timeout > 0, auto-create queue so consumers can wait
+        let queue_arc = if timeout.is_zero() {
+            self.get_queue(queue_name)
+                .ok_or_else(|| Error::new(std::io::ErrorKind::NotFound, "Queue not found"))?
+        } else {
+            self.get_or_create_queue(queue_name)?
+        };
         
         // Clone the Arc to ensure we own it before awaiting
         // This prevents any potential borrow checker issues in async context
