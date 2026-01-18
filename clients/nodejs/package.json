@@ -1,0 +1,38 @@
+{
+  "name": "zoldyq",
+  "version": "0.1.0",
+  "description": "Node.js client for ZoldyQ message queue",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "jest"
+  },
+  "keywords": [
+    "message-queue",
+    "queue",
+    "async",
+    "zoldyq",
+    "msgpack"
+  ],
+  "author": "ZoldyQ Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zoldyq/zoldyq"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
