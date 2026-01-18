@@ -65,6 +65,11 @@ impl QueueManager {
         queue.enqueue(payload)
     }
 
+    pub fn enqueue_message(&self, queue_name: &str, message: Message) -> Result<Message, Error> {
+        let queue = self.get_or_create_queue(queue_name)?;
+        queue.enqueue_message(message)
+    }
+
     pub async fn dequeue(&self, queue_name: &str, timeout: Duration) -> Result<Option<Message>, Error> {
         // If timeout is zero, require queue to exist (don't auto-create)
         // If timeout > 0, auto-create queue so consumers can wait
