@@ -9,7 +9,7 @@ crossbeam = "0.8.4"
 dashmap = "6.1.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
@@ -17,10 +17,30 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 redis-protocol = { version = "5.0", features = ["decode-logs"] }
 bytes = "1.5"
 
+# HTTP server for health checks
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+
+# Persistence
+bincode = "1"
+crc32fast = "1.4"
+
+# Message IDs
+uuid = { version = "1", features = ["v4"] }
+
+# ZQP protocol - MessagePack
+rmp-serde = "1.3"
+
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
 name = "queue_benchmarks"
+path = "benchmarks/queue_benchmarks.rs"
 harness = false
+
+[[bin]]
+name = "quick_bench"
+path = "benchmarks/quick_bench.rs"

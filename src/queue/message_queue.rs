@@ -60,11 +60,13 @@ impl MessageQueue {
 
     pub fn enqueue(&self, payload: serde_json::Value) -> Result<Message, Error> {
         let message = Message::new(payload);
+        self.enqueue_message(message)
+    }
+
+    pub fn enqueue_message(&self, message: Message) -> Result<Message, Error> {
         match self.queue.push(message.clone()) {
             Ok(()) => {
                 self.stats.enqueued_total.fetch_add(1, Ordering::SeqCst);
-                // Use notify_one() instead of notify_waiters() to avoid blocking
-                // notify_one() wakes a single waiting task and is non-blocking
                 self.notify.notify_one();
                 Ok(message)
             }
@@ -131,6 +133,13 @@ impl MessageQueue {
         }
     }
 
+    pub fn try_dequeue(&self) -> Option<Message> {
+        self.queue.pop().map(|message| {
+            self.stats.dequeued_total.fetch_add(1, Ordering::SeqCst);
+            message
+        })
+    }
+
     pub fn size(&self) -> usize {
         self.queue.len()
     }
@@ -145,5 +154,16 @@ impl MessageQueue {
 
     pub fn stats(&self) -> &QueueStats {
         &self.stats
+    }
+
+    pub fn snapshot_messages(&self) -> Vec<Message> {
+        let mut messages = Vec::with_capacity(self.queue.len());
+        while let Some(msg) = self.queue.pop() {
+            messages.push(msg);
+        }
+        for msg in messages.iter().rev() {
+            let _ = self.queue.push(msg.clone());
+        }
+        messages
     }
 }
